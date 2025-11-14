@@ -2,9 +2,9 @@ import cv2
 import numpy as np
 
 # --------------- READ DNN MODEL ---------------
-config = "model/yolov3.cfg"
-weights = "model/yolov3.weights"
-LABELS = open("model/coco.names").read().strip().split("\n")
+config = "../model/yolov3.cfg"
+weights = "../model/yolov3.weights"
+LABELS = open("../model/coco.names").read().strip().split("\n")
 
 colors = np.random.randint(0, 255, size=(len(LABELS), 3), dtype="uint8")
 
