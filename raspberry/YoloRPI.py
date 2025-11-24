@@ -5,7 +5,7 @@ import lgpio
 
 # ------------------- CONFIGURACION SERVO -------------------
 SERVO_PIN = 4
-SERVO_FREQ = 50  # 50 Hz para servomotor estándar
+SERVO_FREQ = 50
 
 chip = lgpio.gpiochip_open(0)
 lgpio.gpio_claim_output(chip, SERVO_PIN, 0)
@@ -13,7 +13,7 @@ lgpio.gpio_claim_output(chip, SERVO_PIN, 0)
 def set_servo_angle(angle):
     """
     Control del servo usando pulsos manuales con lgpio.
-    Convierte ángulo (0-180) a ancho de pulso (1000-2000 µs).
+    Convierte angulo (0-180) a ancho de pulso (1000-2000 µs).
     """
     pulse_width = 1000 + (angle / 180.0) * 1000
     lgpio.gpio_write(chip, SERVO_PIN, 1)
@@ -60,7 +60,6 @@ try:
         if not ret:
             continue
 
-        # Mostrar cámara
         cv2.imshow("Deteccion Botellas", frame)
 
         # Preparar YOLO
