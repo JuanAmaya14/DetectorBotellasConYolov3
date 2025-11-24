@@ -1,98 +1,99 @@
 import cv2
 import numpy as np
 
-# -------------------------------------------------
-# CONFIGURACIÓN DEL MODELO
-# -------------------------------------------------
+# --------------- READ DNN MODEL ---------------
 config = "../model/yolov3.cfg"
 weights = "../model/yolov3.weights"
 LABELS = open("../model/coco.names").read().strip().split("\n")
 
-colors = np.random.randint(0, 255, size=(len(LABELS), 3), dtype="uint8")
+TARGET_CLASS = "bottle"
+
+if TARGET_CLASS not in LABELS:
+    print(f"Error: '{TARGET_CLASS}' no está en coco.names")
+    exit()
+
+TARGET_ID = LABELS.index(TARGET_CLASS)
+
+color = (0, 255, 0)
 
 net = cv2.dnn.readNetFromDarknet(config, weights)
 
-# Para Raspberry Pi (CPU)
 net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
 net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
 
-# Obtener capas de salida
 layer_names = net.getLayerNames()
 output_layers = [layer_names[i - 1] for i in net.getUnconnectedOutLayers()]
 
-# -------------------------------------------------
-# CONFIGURACIÓN DE LA CÁMARA PARA RPi
-# -------------------------------------------------
-cap = cv2.VideoCapture(0, cv2.CAP_V4L2)  # evita ventanas múltiples
-
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)   # resolución baja = más FPS
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 240)
-cap.set(cv2.CAP_PROP_FPS, 30)
+# --------------- OPEN CAMERA ---------------
+cap = cv2.VideoCapture(0)
 
 if not cap.isOpened():
     print("Error: No se pudo abrir la cámara.")
     exit()
 
-try:
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            print("Error: No se pudo leer el frame.")
-            break
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
 
-        height, width, _ = frame.shape
+    height, width = frame.shape[:2]
 
-        # --------- CREAR BLOB OPTIMIZADO PARA RPI ----------
-        blob = cv2.dnn.blobFromImage(frame, 1/255.0, (320, 320),
-                                     swapRB=True, crop=False)
+    # --------------- CREATE BLOB ---------------
+    blob = cv2.dnn.blobFromImage(frame, 1 / 255.0, (320, 320), swapRB=True, crop=False)
 
-        net.setInput(blob)
-        outputs = net.forward(output_layers)
+    net.setInput(blob)
+    outputs = net.forward(output_layers)
 
-        boxes = []
-        confidences = []
-        classIDs = []
+    boxes = []
+    confidences = []
+    classIDs = []
 
-        # --------- PROCESAR DETECCIONES ----------
-        for output in outputs:
-            for detection in output:
-                scores = detection[5:]
-                classID = np.argmax(scores)
-                confidence = scores[classID]
+    botellaEncontrada = False  # Por defecto NO encontrada
 
-                if confidence > 0.5:
-                    box = detection[:4] * np.array([width, height, width, height])
-                    (x_center, y_center, w, h) = box.astype("int")
+    # --------------- PROCESS DETECTIONS ---------------
+    for output in outputs:
+        for detection in output:
 
-                    x = int(x_center - (w / 2))
-                    y = int(y_center - (h / 2))
+            scores = detection[5:]
+            classID = np.argmax(scores)
 
-                    boxes.append([x, y, w, h])
-                    confidences.append(float(confidence))
-                    classIDs.append(classID)
+            if classID != TARGET_ID:
+                continue
 
-        # --------- NMS ----------
-        idxs = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.5)
+            confidence = scores[classID]
 
-        # --------- DIBUJAR ----------
-        if len(idxs) > 0:
-            for i in idxs.flatten():
-                x, y, w, h = boxes[i]
-                color = colors[classIDs[i]].tolist()
-                text = "{}: {:.2f}".format(LABELS[classIDs[i]], confidences[i])
+            if confidence > 0.5:
+                botellaEncontrada = True  # ✔ Se encontró botella
 
-                cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
-                cv2.putText(frame, text, (x, y - 5),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                box = detection[:4] * np.array([width, height, width, height])
+                (x_center, y_center, w, h) = box.astype("int")
 
-        cv2.imshow("YOLOv3 - Raspberry Pi", frame)
+                x = int(x_center - w / 2)
+                y = int(y_center - h / 2)
 
-        # --------- CLAVE: aumentar waitKey para evitar ventanas múltiples ----------
-        if cv2.waitKey(10) & 0xFF == ord('q'):
-            break
+                boxes.append([x, y, w, h])
+                confidences.append(float(confidence))
+                classIDs.append(classID)
 
-except KeyboardInterrupt:
-    pass
+    idxs = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
+
+    # --------------- DRAW ONLY BOTTLES ---------------
+    if len(idxs) > 0:
+        for i in idxs.flatten():
+            x, y, w, h = boxes[i]
+            text = f"BOTTLE: {confidences[i]:.2f}"
+
+            cv2.rectangle(frame, (x, y), (x + w, y + h), color, 2)
+            cv2.putText(
+                frame, text, (x, y - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2
+            )
+
+    cv2.imshow("Detección Botellas - YOLOv3", frame)
+
+    print("botellaEncontrada:", botellaEncontrada)
+
+    if cv2.waitKey(1) & 0xFF == ord("q"):
+        break
 
 cap.release()
 cv2.destroyAllWindows()
