@@ -27,8 +27,8 @@ set_servo_angle(0)
 print("Servo inicializado en 0 grados")
 
 # ------------------- CARGAR MODELO YOLO -------------------
-config = "../model/yolov3.cfg"
-weights = "../model/yolov3.weights"
+config = "../model/tiny/yolov3.cfg"
+weights = "../model/tiny/yolov3.weights"
 LABELS = open("../model/coco.names").read().strip().split("\n")
 
 net = cv2.dnn.readNetFromDarknet(config, weights)
