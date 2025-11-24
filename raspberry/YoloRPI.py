@@ -30,6 +30,8 @@ weights = "../model/tiny/yolov3-tiny.weights"
 LABELS = open("../model/coco.names").read().strip().split("\n")
 
 net = cv2.dnn.readNetFromDarknet(config, weights)
+net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
 
 ln = net.getLayerNames()
 ln = [ln[i - 1] for i in net.getUnconnectedOutLayers().flatten()]
@@ -39,10 +41,8 @@ try:
     cv2.destroyAllWindows()
     cv2.waitKey(1)
 except:
-    pass
-
-cv2.namedWindow("Deteccion Botellas", cv2.WINDOW_NORMAL)
-cv2.resizeWindow("Deteccion Botellas", 640, 480)
+    cv2.namedWindow("Deteccion Botellas", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("Deteccion Botellas", 640, 480)
 
 # ------------------- CAMARA -------------------
 camera = cv2.VideoCapture(0)
