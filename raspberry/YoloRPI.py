@@ -1,24 +1,27 @@
 import cv2
 import numpy as np
-import os
 import sys
 import time
-import pigpio
+import lgpio
 
-# -------- CONFIGURAR SERVOMOTOR (pigpio) --------
+# -------- CONFIGURAR SERVOMOTOR (lgpio) --------
 SERVO_PIN = 17
-pi = pigpio.pi()
+CHIP = 0  # RP1 chip del Raspberry Pi 5
 
-if not pi.connected:
-    print("Error: pigpio no esta corriendo.")
-    sys.exit()
+# Abrir chip GPIO
+h = lgpio.gpiochip_open(CHIP)
+
+# Configurar pin como salida PWM
+lgpio.gpio_claim_output(h, SERVO_PIN)
 
 def set_servo_angle(angle):
     """
-    Convierte 0-180° a un pulso entre 500 y 2500 microsegundos
+    Convierte 0-180° a un pulso entre 500 y 2500us
+    y lo envía usando PWM desde lgpio
     """
-    pulse = 500 + (angle * 11.11)  # 500us -> 0°, 2500us -> 180°
-    pi.set_servo_pulsewidth(SERVO_PIN, pulse)
+    pulse = int(500 + (angle * 11.11))   # microsegundos
+    lgpio.tx_pwm(h, SERVO_PIN, 50, (pulse / 20000) * 100)  
+    # 50Hz, duty = (pulse/periodo)*100
 
 # -------- EVITAR MULTIPLES VENTANAS --------
 try:
@@ -28,7 +31,7 @@ try:
 except:
     pass
 
-# -------- LEER MODELO (TINY) --------
+# -------- MODELO TINY --------
 config = "../model/tiny/yolov3-tiny.cfg"
 weights = "../model/tiny/yolov3-tiny.weights"
 LABELS = open("../model/coco.names").read().strip().split("\n")
@@ -53,7 +56,7 @@ if not cap.isOpened():
 cv2.namedWindow("Botellas", cv2.WINDOW_NORMAL)
 cv2.resizeWindow("Botellas", 640, 480)
 
-# -------- VARIABLES SERVO --------
+# -------- VARIABLES DEL SERVO --------
 servo_tiempo_inicio = 0
 servo_activo = False
 
@@ -109,7 +112,7 @@ try:
                 cv2.putText(frame_small, text, (x, y-5),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
-        # -------- CONTROL SERVOMOTOR --------
+        # -------- CONTROL DEL SERVO --------
         tiempo_actual = time.time()
 
         if botellaEncontrada and not servo_activo:
@@ -134,11 +137,11 @@ try:
             break
 
 except KeyboardInterrupt:
-    print("Interrupcion del usuario")
+    print("Interrupción del usuario")
 
 finally:
     set_servo_angle(0)
     cap.release()
     cv2.destroyAllWindows()
-    pi.stop()
+    lgpio.gpiochip_close(h)
     cv2.waitKey(1)
