@@ -1,163 +1,114 @@
-import sys
-import time
 import cv2
 import numpy as np
-
-# -------- FIX PARA USAR LGPIO DEL SISTEMA, NO DEL VENV --------
-sys.path.insert(0, "/usr/lib/python3/dist-packages")
-
+import time
 import lgpio
 
-# -------- CONFIGURAR SERVOMOTOR (lgpio + tx_pwm) --------
-SERVO_PIN = 17
-CHIP = 0  # Raspberry Pi 5 -> chip 0
-
-# Abrir chip GPIO
-h = lgpio.gpiochip_open(CHIP)
-
-# Configurar pin como salida
-lgpio.gpio_claim_output(h, SERVO_PIN)
-
+# ------------------- CONFIGURACIÓN SERVO -------------------
+SERVO_PIN = 4
+SERVO_FREQ = 50  # 50 Hz → 20ms periodo
+chip = lgpio.gpiochip_open(0)
+lgpio.gpio_claim_output(chip, SERVO_PIN)
 
 def set_servo_angle(angle):
     """
-    Control de servo usando tx_pwm() en Raspberry Pi 5.
+    Control manual del servo usando pulsos de 1–2 ms.
     """
-    # 0° → ~500us, 180° → ~2500us
-    pulse = 500 + (angle * 11.11)     # microsegundos aproximados
-    duty = float(pulse) / 20000 * 100  # porcentaje 0–100
+    pulse_width = 1000 + (angle / 180.0) * 1000  # de 1000 a 2000 microsegundos
+    period = 20000  # 20 ms
 
-    lgpio.tx_pwm(h, SERVO_PIN, 50, duty)  # hz=50 (INT), duty=float
+    # Generar 1 ciclo del PWM manual
+    lgpio.gpio_write(chip, SERVO_PIN, 1)
+    time.sleep(pulse_width / 1_000_000)
 
+    lgpio.gpio_write(chip, SERVO_PIN, 0)
+    time.sleep((period - pulse_width) / 1_000_000)
 
-def stop_servo():
-    """Detener PWM (duty=0 pero frecuencia mantiene modo PWM estable)."""
-    lgpio.tx_pwm(h, SERVO_PIN, 50, 0.0)
+# Inicializar servo en 0°
+set_servo_angle(0)
+print("Servo inicializado en 0 grados")
 
-
-# -------- EVITAR MULTIPLES VENTANAS --------
-try:
-    if cv2.getWindowProperty("Botellas", 0) >= 0:
-        cv2.destroyAllWindows()
-        cv2.waitKey(1)
-except:
-    pass
-
-
-# -------- MODELO YOLO TINY --------
-config = "../model/tiny/yolov3-tiny.cfg"
-weights = "../model/tiny/yolov3-tiny.weights"
+# ------------------- CARGAR MODELO YOLO -------------------
+config = "../model/yolov3.cfg"
+weights = "../model/yolov3.weights"
 LABELS = open("../model/coco.names").read().strip().split("\n")
 
-TARGET_CLASS = "bottle"
-TARGET_ID = LABELS.index(TARGET_CLASS)
-color = (0, 255, 0)
-
 net = cv2.dnn.readNetFromDarknet(config, weights)
-net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
-net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
 
-layer_names = net.getLayerNames()
-output_layers = [layer_names[i - 1] for i in net.getUnconnectedOutLayers()]
+ln = net.getLayerNames()
+ln = [ln[i - 1] for i in net.getUnconnectedOutLayers().flatten()]
 
+# ------------------- CÁMARA -------------------
+camera = cv2.VideoCapture(0)
 
-# -------- CAMARA --------
-cap = cv2.VideoCapture(0)
-if not cap.isOpened():
-    print("Error al abrir cámara")
-    sys.exit()
+triggered = False
+action_end = 0
+cooldown = 5
+non_bottle_counter = 0
+rearm_frames = 5
+servo_angle = 0
 
-cv2.namedWindow("Botellas", cv2.WINDOW_NORMAL)
-cv2.resizeWindow("Botellas", 640, 480)
-
-
-# -------- VARIABLES DEL SERVO --------
-servo_tiempo_inicio = 0
-servo_activo = False
-
-
-# -------- LOOP PRINCIPAL --------
 try:
     while True:
-        ret, frame = cap.read()
+        ret, frame = camera.read()
         if not ret:
-            break
+            continue
 
-        frame_small = cv2.resize(frame, (320, 240))
+        # Mostrar cámara
+        cv2.imshow("Detección Botellas", frame)
 
-        blob = cv2.dnn.blobFromImage(frame_small, 1/255.0, (256, 256), swapRB=True)
+        # Preparar YOLO
+        blob = cv2.dnn.blobFromImage(frame, 1/255.0, (416,416), swapRB=True, crop=False)
         net.setInput(blob)
-        outputs = net.forward(output_layers)
+        layerOutputs = net.forward(ln)
 
-        height, width = frame_small.shape[:2]
-        boxes = []
-        confidences = []
-        botellaEncontrada = False
+        found_bottle = False
 
-        for output in outputs:
-            for detection in output:
+        for out in layerOutputs:
+            for detection in out:
                 scores = detection[5:]
                 classID = np.argmax(scores)
-
-                if classID != TARGET_ID:
-                    continue
-
                 confidence = scores[classID]
 
-                if confidence > 0.5:
-                    botellaEncontrada = True
+                if confidence > 0.5 and LABELS[classID] == "bottle":
+                    found_bottle = True
 
-                    box = detection[:4] * np.array([width, height, width, height])
-                    (xc, yc, w, h) = box.astype("int")
+        now = time.time()
 
-                    x = int(xc - w / 2)
-                    y = int(yc - h / 2)
+        # ------------------- LÓGICA DEL SERVO -------------------
+        if found_bottle and not triggered and now >= action_end:
+            triggered = True
+            action_end = now + cooldown
+            non_bottle_counter = 0
+            servo_angle = 180
+            set_servo_angle(servo_angle)
+            print("Botella detectada → Servo a 180°")
 
-                    boxes.append([x, y, w, h])
-                    confidences.append(float(confidence))
-
-        idxs = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
-
-        if len(idxs) > 0:
-            for i in idxs.flatten():
-                x, y, w, h = boxes[i]
-                text = f"{confidences[i]:.2f}"
-
-                cv2.rectangle(frame_small, (x, y), (x+w, y+h), color, 2)
-                cv2.putText(frame_small, text, (x, y-5),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-
-        # -------- CONTROL DEL SERVO --------
-        tiempo_actual = time.time()
-
-        if botellaEncontrada and not servo_activo:
-            servo_tiempo_inicio = tiempo_actual
-            servo_activo = True
-            set_servo_angle(90)
-            print("botellaEncontrada: True → Servo 90°")
-
-        elif servo_activo:
-            if tiempo_actual - servo_tiempo_inicio >= 10:
-                servo_activo = False
-                set_servo_angle(0)
-                print("Pasaron 10s → Servo 0°")
-
+        if triggered:
+            if now < action_end:
+                set_servo_angle(servo_angle)
+            else:
+                if not found_bottle:
+                    non_bottle_counter += 1
+                    if non_bottle_counter >= rearm_frames:
+                        triggered = False
+                        non_bottle_counter = 0
+                        servo_angle = 0
+                        set_servo_angle(servo_angle)
+                        print("Rearmado → Servo a 0°")
+                else:
+                    non_bottle_counter = 0
         else:
-            set_servo_angle(0)
+            servo_angle = 0
+            set_servo_angle(servo_angle)
 
-        cv2.imshow("Botellas", frame_small)
-
-        if cv2.waitKey(5) & 0xFF == ord("q"):
+        # Salir con ESC
+        key = cv2.waitKey(1)
+        if key == 27:
             break
 
-except KeyboardInterrupt:
-    print("Interrupción por usuario")
-
 finally:
-    print("Cerrando todo...")
-
-    stop_servo()
-    cap.release()
+    set_servo_angle(0)
+    lgpio.gpiochip_close(chip)
+    camera.release()
     cv2.destroyAllWindows()
-    lgpio.gpiochip_close(h)
-    cv2.waitKey(1)
+    print("Finalizado – Servo a 0°")
