@@ -3,7 +3,7 @@ import numpy as np
 import time
 import lgpio
 
-# ------------------- CONFIGURACIÓN SERVO -------------------
+# ------------------- CONFIGURACION SERVO -------------------
 SERVO_PIN = 4
 SERVO_FREQ = 50  # 50 Hz → 20ms periodo
 chip = lgpio.gpiochip_open(0)
@@ -16,7 +16,6 @@ def set_servo_angle(angle):
     pulse_width = 1000 + (angle / 180.0) * 1000  # de 1000 a 2000 microsegundos
     period = 20000  # 20 ms
 
-    # Generar 1 ciclo del PWM manual
     lgpio.gpio_write(chip, SERVO_PIN, 1)
     time.sleep(pulse_width / 1_000_000)
 
@@ -37,7 +36,17 @@ net = cv2.dnn.readNetFromDarknet(config, weights)
 ln = net.getLayerNames()
 ln = [ln[i - 1] for i in net.getUnconnectedOutLayers().flatten()]
 
-# ------------------- CÁMARA -------------------
+# ------------------- INICIALIZAR VENTANA (UNA SOLA) -------------------
+try:
+    cv2.destroyAllWindows()
+    cv2.waitKey(1)
+except:
+    pass
+
+cv2.namedWindow("Deteccion Botellas", cv2.WINDOW_NORMAL)
+cv2.resizeWindow("Deteccion Botellas", 640, 480)
+
+# ------------------- CAMARA -------------------
 camera = cv2.VideoCapture(0)
 
 triggered = False
@@ -53,8 +62,8 @@ try:
         if not ret:
             continue
 
-        # Mostrar cámara
-        cv2.imshow("Detección Botellas", frame)
+        # Mostrar cAmara (WINDOW YA EXISTE)
+        cv2.imshow("Deteccion Botellas", frame)
 
         # Preparar YOLO
         blob = cv2.dnn.blobFromImage(frame, 1/255.0, (416,416), swapRB=True, crop=False)
@@ -74,7 +83,7 @@ try:
 
         now = time.time()
 
-        # ------------------- LÓGICA DEL SERVO -------------------
+        # ------------------- LOGICA DEL SERVO -------------------
         if found_bottle and not triggered and now >= action_end:
             triggered = True
             action_end = now + cooldown
