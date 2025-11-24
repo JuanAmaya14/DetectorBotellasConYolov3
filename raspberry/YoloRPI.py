@@ -1,7 +1,11 @@
-import cv2
-import numpy as np
 import sys
 import time
+import cv2
+import numpy as np
+
+# -------- FIX PARA USAR LGPIO DEL SISTEMA, NO DEL VENV --------
+sys.path.insert(0, "/usr/lib/python3/dist-packages")
+
 import lgpio
 
 # -------- CONFIGURAR SERVOMOTOR (lgpio + tx_pwm) --------
@@ -19,16 +23,16 @@ def set_servo_angle(angle):
     """
     Control de servo usando tx_pwm() en Raspberry Pi 5.
     """
-    pulse = 500 + (angle * 11.11)     # microsegundos
-    duty = float(pulse) / 20000 * 100  # porcentaje
+    # 0° → ~500us, 180° → ~2500us
+    pulse = 500 + (angle * 11.11)     # microsegundos aproximados
+    duty = float(pulse) / 20000 * 100  # porcentaje 0–100
 
-    # Forzar tipo float para duty y frecuencia (tx_pwm exige floats)
-    lgpio.tx_pwm(h, SERVO_PIN, float(50.0), float(duty))
+    lgpio.tx_pwm(h, SERVO_PIN, 50, duty)  # hz=50 (INT), duty=float
 
 
 def stop_servo():
-    """Detener PWM completamente."""
-    lgpio.tx_pwm(h, SERVO_PIN, 0.0, 0.0)
+    """Detener PWM (duty=0 pero frecuencia mantiene modo PWM estable)."""
+    lgpio.tx_pwm(h, SERVO_PIN, 50, 0.0)
 
 
 # -------- EVITAR MULTIPLES VENTANAS --------
@@ -140,7 +144,6 @@ try:
 
         else:
             set_servo_angle(0)
-            print("botellaEncontrada: False → Servo 0°")
 
         cv2.imshow("Botellas", frame_small)
 
