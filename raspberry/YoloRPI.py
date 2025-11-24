@@ -2,20 +2,23 @@ import cv2
 import numpy as np
 import os
 import sys
-import RPi.GPIO as GPIO
 import time
+import pigpio
 
-# -------- CONFIGURAR SERVOMOTOR --------
+# -------- CONFIGURAR SERVOMOTOR (pigpio) --------
 SERVO_PIN = 17
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(SERVO_PIN, GPIO.OUT)
-servo = GPIO.PWM(SERVO_PIN, 50)
-servo.start(0)
+pi = pigpio.pi()
+
+if not pi.connected:
+    print("Error: pigpio no esta corriendo.")
+    sys.exit()
 
 def set_servo_angle(angle):
-    """Convierte angulo (0-180) a duty cycle para el servo"""
-    duty = 2 + (angle / 18)
-    servo.ChangeDutyCycle(duty)
+    """
+    Convierte 0-180° a un pulso entre 500 y 2500 microsegundos
+    """
+    pulse = 500 + (angle * 11.11)  # 500us -> 0°, 2500us -> 180°
+    pi.set_servo_pulsewidth(SERVO_PIN, pulse)
 
 # -------- EVITAR MULTIPLES VENTANAS --------
 try:
@@ -61,7 +64,6 @@ try:
         if not ret:
             break
 
-        # Reducir tamanho para bajar temperatura
         frame_small = cv2.resize(frame, (320, 240))
 
         blob = cv2.dnn.blobFromImage(frame_small, 1/255.0, (256, 256), swapRB=True)
@@ -107,25 +109,22 @@ try:
                 cv2.putText(frame_small, text, (x, y-5),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
-        # -------- CONTROL SERVO --------
+        # -------- CONTROL SERVOMOTOR --------
         tiempo_actual = time.time()
-        
+
         if botellaEncontrada and not servo_activo:
-            # Botella detectada, activar servo
             servo_tiempo_inicio = tiempo_actual
             servo_activo = True
             set_servo_angle(90)
             print("botellaEncontrada: True - Servo a 90°")
-        
+
         elif servo_activo:
-            # Verificar si pasaron 10 segundos
             if tiempo_actual - servo_tiempo_inicio >= 10:
                 servo_activo = False
                 set_servo_angle(0)
                 print("10 segundos transcurridos - Servo a 0°")
-        
+
         else:
-            # No hay botella y servo no activo
             set_servo_angle(0)
             print("botellaEncontrada: False - Servo a 0°")
 
@@ -138,9 +137,8 @@ except KeyboardInterrupt:
     print("Interrupcion del usuario")
 
 finally:
+    set_servo_angle(0)
     cap.release()
     cv2.destroyAllWindows()
-    set_servo_angle(0)
-    servo.stop()
-    GPIO.cleanup()
+    pi.stop()
     cv2.waitKey(1)
