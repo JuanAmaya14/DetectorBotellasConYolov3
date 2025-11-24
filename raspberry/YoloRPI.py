@@ -4,7 +4,7 @@ import sys
 import time
 import lgpio
 
-# -------- CONFIGURAR SERVOMOTOR (lgpio) --------
+# -------- CONFIGURAR SERVOMOTOR (lgpio + tx_pwm) --------
 SERVO_PIN = 17
 CHIP = 0  # Raspberry Pi 5 -> chip 0
 
@@ -17,13 +17,18 @@ lgpio.gpio_claim_output(h, SERVO_PIN)
 
 def set_servo_angle(angle):
     """
-    Convierte 0-180° a un pulso entre 500 y 2500us para servo
-    y lo envía por PWM estable a 50 Hz.
+    Control de servo usando tx_pwm() en Raspberry Pi 5.
     """
-    pulse = 500 + (angle * 11.11)  # microsegundos (500–2500 µs)
+    pulse = 500 + (angle * 11.11)     # microsegundos
+    duty = float(pulse) / 20000 * 100  # porcentaje
 
-    duty = (pulse / 20000) * 100   # periodo total: 20ms → 50Hz
-    lgpio.gpio_pwm(h, SERVO_PIN, duty, 50)  # PWM estable para servos
+    # Forzar tipo float para duty y frecuencia (tx_pwm exige floats)
+    lgpio.tx_pwm(h, SERVO_PIN, float(50.0), float(duty))
+
+
+def stop_servo():
+    """Detener PWM completamente."""
+    lgpio.tx_pwm(h, SERVO_PIN, 0.0, 0.0)
 
 
 # -------- EVITAR MULTIPLES VENTANAS --------
@@ -76,7 +81,6 @@ try:
 
         frame_small = cv2.resize(frame, (320, 240))
 
-        # YOLO INPUT
         blob = cv2.dnn.blobFromImage(frame_small, 1/255.0, (256, 256), swapRB=True)
         net.setInput(blob)
         outputs = net.forward(output_layers)
@@ -86,7 +90,6 @@ try:
         confidences = []
         botellaEncontrada = False
 
-        # PROCESAR DETECCIONES
         for output in outputs:
             for detection in output:
                 scores = detection[5:]
@@ -111,7 +114,6 @@ try:
 
         idxs = cv2.dnn.NMSBoxes(boxes, confidences, 0.5, 0.4)
 
-        # DIBUJAR DETECCIONES
         if len(idxs) > 0:
             for i in idxs.flatten():
                 x, y, w, h = boxes[i]
@@ -145,21 +147,14 @@ try:
         if cv2.waitKey(5) & 0xFF == ord("q"):
             break
 
-# -------- MANEJO DE ERRORES --------
 except KeyboardInterrupt:
     print("Interrupción por usuario")
 
 finally:
     print("Cerrando todo...")
 
-    # Detener PWM del servo
-    lgpio.gpio_pwm(h, SERVO_PIN, 0, 0)
-
-    # Cerrar cámara
+    stop_servo()
     cap.release()
     cv2.destroyAllWindows()
-
-    # Cerrar chip gpio
     lgpio.gpiochip_close(h)
-
     cv2.waitKey(1)
