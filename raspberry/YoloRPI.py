@@ -7,6 +7,10 @@ import lgpio
 SERVO_PIN = 4
 SERVO_FREQ = 50
 
+# Tamaño de ventana / display (reduce esto para que la ventana sea más pequeña)
+DISPLAY_WIDTH = 320
+DISPLAY_HEIGHT = 240
+
 chip = lgpio.gpiochip_open(0)
 lgpio.gpio_claim_output(chip, SERVO_PIN, 0)
 
@@ -37,15 +41,16 @@ ln = net.getLayerNames()
 ln = [ln[i - 1] for i in net.getUnconnectedOutLayers().flatten()]
 
 # ------------------- INICIALIZAR VENTANA -------------------
-try:
-    cv2.destroyAllWindows()
-    cv2.waitKey(1)
-except:
-    cv2.namedWindow("Deteccion Botellas", cv2.WINDOW_NORMAL)
-    cv2.resizeWindow("Deteccion Botellas", 640, 480)
+cv2.destroyAllWindows()
+cv2.waitKey(1)
+cv2.namedWindow("Deteccion Botellas", cv2.WINDOW_NORMAL)
+cv2.resizeWindow("Deteccion Botellas", DISPLAY_WIDTH, DISPLAY_HEIGHT)
 
 # ------------------- CAMARA -------------------
 camera = cv2.VideoCapture(0)
+# Ajustar resolución de captura a la del display para menos carga
+camera.set(cv2.CAP_PROP_FRAME_WIDTH, DISPLAY_WIDTH)
+camera.set(cv2.CAP_PROP_FRAME_HEIGHT, DISPLAY_HEIGHT)
 
 triggered = False
 action_end = 0.0
@@ -60,7 +65,9 @@ try:
         if not ret:
             continue
 
-        cv2.imshow("Deteccion Botellas", frame)
+        # Reducir tamaño antes de mostrar para que la ventana sea pequeña
+        frame_display = cv2.resize(frame, (DISPLAY_WIDTH, DISPLAY_HEIGHT), interpolation=cv2.INTER_AREA)
+        cv2.imshow("Deteccion Botellas", frame_display)
 
         # Preparar YOLO
         blob = cv2.dnn.blobFromImage(frame, 1/255.0, (416, 416), swapRB=True, crop=False)
