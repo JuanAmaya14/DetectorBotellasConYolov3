@@ -7,6 +7,9 @@ import lgpio
 SERVO_PIN = 4
 SERVO_FREQ = 50
 
+ANGULOINICIO = 180
+ANGULOFINAL = 0
+
 # Tamaño de ventana / display (reduce esto para que la ventana sea más pequeña)
 DISPLAY_WIDTH = 320
 DISPLAY_HEIGHT = 240
@@ -24,9 +27,10 @@ def set_servo_angle(angle):
     time.sleep(pulse_width / 1_000_000)
     lgpio.gpio_write(chip, SERVO_PIN, 0)
 
-servo_angle = 0
+# Mantener servo en ANGULOINICIO por defecto (180°).
+servo_angle = ANGULOINICIO
 set_servo_angle(servo_angle)
-print("Servomotor inicializado en 0 grados")
+print(f"Servomotor inicializado en {servo_angle} grados")
 
 # ------------------- CARGAR MODELO YOLO -------------------
 config = "../model/tiny/yolov3-tiny.cfg"
@@ -57,7 +61,6 @@ action_end = 0.0
 cooldown = 5.0
 rearm_frames_needed = 5
 non_bottle_counter = 0
-servo_angle = 0
 
 try:
     while True:
@@ -95,9 +98,9 @@ try:
             triggered = True
             action_end = now + cooldown
             non_bottle_counter = 0
-            servo_angle = 180
+            servo_angle = ANGULOFINAL  # 0°
             set_servo_angle(servo_angle)
-            print("Botella detectada, servomotor a 180 grados")
+            print("Botella detectada, servomotor a 0 grados")
 
         if triggered:
             if now < action_end:
@@ -108,13 +111,13 @@ try:
                     if non_bottle_counter >= rearm_frames_needed:
                         triggered = False
                         non_bottle_counter = 0
-                        set_servo_angle(0)
-                        servo_angle = 0
-                        print("Servo retornando a 0 grados")
+                        servo_angle = ANGULOINICIO  # volver a 180°
+                        set_servo_angle(servo_angle)
+                        print(f"Servo retornando a {servo_angle} grados")
                 else:
                     non_bottle_counter = 0
         else:
-            servo_angle = 0
+            servo_angle = ANGULOINICIO  # 180° por defecto
             set_servo_angle(servo_angle)
 
         print("Botella detectada:", found_bottle, end="")
@@ -125,8 +128,8 @@ try:
             break
 
 finally:
-    set_servo_angle(0)
+    set_servo_angle(ANGULOINICIO)
     lgpio.gpiochip_close(chip)
-    print("Programa interrumpido - Servo en 0 grados")
+    print(f"Programa interrumpido - Servo en {ANGULOINICIO} grados")
     camera.release()
     cv2.destroyAllWindows()
