@@ -1,4 +1,4 @@
-[Pagina](https://opencv-tutorial.readthedocs.io/en/latest/yolo/yolo.html) de los modelos de Yolo v3 (descargar **yolov3.weights**, **yolov3.cfg** y **coco.names**)
+[Pagina de los modelos de Yolo v3](https://opencv-tutorial.readthedocs.io/en/latest/yolo/yolo.html) (descargar **yolov3.weights**, **yolov3.cfg** y **coco.names**)
 
 Crear la carpeta "model" y poner los archivos ahi
 
