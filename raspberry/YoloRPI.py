@@ -10,7 +10,6 @@ SERVO_FREQ = 50
 ANGULOINICIO = 180
 ANGULOFINAL = 0
 
-# Tamaño de ventana / display (reduce esto para que la ventana sea más pequeña)
 DISPLAY_WIDTH = 320
 DISPLAY_HEIGHT = 240
 
