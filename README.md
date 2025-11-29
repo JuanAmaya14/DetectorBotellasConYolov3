@@ -10,5 +10,7 @@ Crear la carpeta "model" y poner los archivos ahi
 
 ### Modelos Tiny para raspberry
 
+**⚠ Importante:** Al usar estos modelos en la raspberry de manera local este puede llegar a temperaturas altas de mas de 60 grados, recomiendo un sistema de enfriamiento mejor o usar el modelo en Google Colab
+
     wget https://raw.githubusercontent.com/pjreddie/darknet/master/cfg/yolov3-tiny.cfg
     wget https://pjreddie.com/media/files/yolov3-tiny.weights
